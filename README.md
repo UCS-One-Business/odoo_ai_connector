@@ -1,4 +1,4 @@
-# ucs-ai-connector
+# odoo_ai_connector
 
 Command-line connector for the **UCS AI gateway** — scoped, audited access to
 live Odoo ERP data for AI agents and scripts.
@@ -26,19 +26,19 @@ changes nothing about what it can see.
 With [uv](https://docs.astral.sh/uv/) (recommended — no setup needed):
 
 ```bash
-uv tool install git+https://github.com/UCS-One-Business/ucs-ai-connector
+uv tool install git+https://github.com/UCS-One-Business/odoo_ai_connector
 ```
 
 With pip/pipx:
 
 ```bash
-pipx install git+https://github.com/UCS-One-Business/ucs-ai-connector
+pipx install git+https://github.com/UCS-One-Business/odoo_ai_connector
 ```
 
 Or run without installing at all:
 
 ```bash
-uvx --from git+https://github.com/UCS-One-Business/ucs-ai-connector ucs-ai --help
+uvx --from git+https://github.com/UCS-One-Business/odoo_ai_connector ucs-ai --help
 ```
 
 ## Connect
@@ -107,6 +107,6 @@ server-side.
 
 ## License
 
-MIT. The connector is intentionally open so anyone can verify exactly what
-runs against their ERP. (The server-side `ucs_ai` Odoo module is licensed
-separately.)
+Apache 2.0. The connector is intentionally open so anyone can verify exactly
+what runs against their ERP. (The server-side `ucs_ai` Odoo module is
+licensed separately.)
