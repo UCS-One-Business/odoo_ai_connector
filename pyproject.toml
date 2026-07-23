@@ -1,0 +1,33 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ucs-ai-connector"
+version = "1.0.0"
+description = "CLI connector for the UCS AI gateway: scoped, read-only access to live Odoo ERP data for AI agents."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [{ name = "UCS OneDo AB" }]
+keywords = ["odoo", "erp", "ai", "agent", "cli"]
+classifiers = [
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Topic :: Office/Business :: Financial :: Accounting",
+]
+# Deliberately empty: the connector is standard-library only, so what runs
+# is exactly what you can read in ucs_ai_connector/cli.py.
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/NilsWickman/ucs-ai-connector"
+Source = "https://github.com/NilsWickman/ucs-ai-connector"
+
+[project.scripts]
+ucs-ai = "ucs_ai_connector.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["ucs_ai_connector"]
