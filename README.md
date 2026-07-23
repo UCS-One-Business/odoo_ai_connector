@@ -26,19 +26,19 @@ changes nothing about what it can see.
 With [uv](https://docs.astral.sh/uv/) (recommended — no setup needed):
 
 ```bash
-uv tool install git+https://github.com/NilsWickman/ucs-ai-connector
+uv tool install git+https://github.com/UCS-One-Business/ucs-ai-connector
 ```
 
 With pip/pipx:
 
 ```bash
-pipx install git+https://github.com/NilsWickman/ucs-ai-connector
+pipx install git+https://github.com/UCS-One-Business/ucs-ai-connector
 ```
 
 Or run without installing at all:
 
 ```bash
-uvx --from git+https://github.com/NilsWickman/ucs-ai-connector ucs-ai --help
+uvx --from git+https://github.com/UCS-One-Business/ucs-ai-connector ucs-ai --help
 ```
 
 ## Connect

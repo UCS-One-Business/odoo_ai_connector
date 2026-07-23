@@ -23,8 +23,8 @@ classifiers = [
 dependencies = []
 
 [project.urls]
-Homepage = "https://github.com/NilsWickman/ucs-ai-connector"
-Source = "https://github.com/NilsWickman/ucs-ai-connector"
+Homepage = "https://github.com/UCS-One-Business/ucs-ai-connector"
+Source = "https://github.com/UCS-One-Business/ucs-ai-connector"
 
 [project.scripts]
 ucs-ai = "ucs_ai_connector.cli:main"
