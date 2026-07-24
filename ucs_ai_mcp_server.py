@@ -1,0 +1,184 @@
+#!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.10"
+# dependencies = ["mcp>=1.0"]
+# ///
+"""Thin MCP adapter for the ucs_ai gateway (PRD FR-27..FR-29, NFR-15).
+
+Translates MCP tool calls 1:1 into HTTPS POSTs against the scoped ucs_ai
+gateway of an Odoo server. This process is deliberately UNTRUSTED and makes
+NO access-control decision (FR-28): every allow/deny happens server-side in
+Odoo, where the PAT's scope is intersected with the bound user's rights. If
+this adapter is modified or replaced, nothing about the security model
+changes — it can only ever see what the gateway already allows.
+
+Configuration (FR-29) — exactly two settings, via environment variables:
+
+    UCS_AI_URL   Base URL of the Odoo server, e.g. https://mycompany.odoo.example
+    UCS_AI_PAT   A Personal Access Token issued in Odoo under
+                 AI > Configuration > Access Tokens
+    UCS_AI_DB    Optional database name. Only needed when the server hosts
+                 several databases (sent as X-Odoo-Database); the production
+                 stack is single-database and does not need it.
+
+Run (stdio transport, as MCP clients expect). With uv, the PEP 723 header
+above resolves the dependency automatically — no venv or pip step:
+
+    UCS_AI_URL=https://... UCS_AI_PAT=... uv run ucs_ai_mcp_server.py
+
+Without uv, install the official MCP python SDK first (pip install "mcp>=1.0"):
+
+    UCS_AI_URL=https://... UCS_AI_PAT=... python3 ucs_ai_mcp_server.py
+
+See the addon's docs/connecting.md for Claude Code / Codex registration.
+"""
+
+import json
+import os
+import sys
+import urllib.error
+import urllib.parse
+import urllib.request
+
+try:
+    from mcp.server.fastmcp import FastMCP
+except ImportError:  # pragma: no cover
+    sys.exit("The 'mcp' package is required: pip install 'mcp>=1.0'")
+
+GATEWAY_PREFIX = '/ucs_ai/gateway/v1'
+TIMEOUT = 60
+
+mcp = FastMCP(
+    "ucs-ai",
+    instructions=(
+        "Scoped access to live Odoo data through the ucs_ai gateway. Start "
+        "with list_models to see what is readable, then describe_model for "
+        "the schema of a model. Only the models and fields returned by those "
+        "tools are readable; requests outside that scope are denied by the "
+        "server. Domains, order, group-by and aggregates may only reference "
+        "allowed fields, and dotted/related paths are rejected. post_log_note "
+        "is the only write tool and works only when the scope opts in."
+    ),
+)
+
+
+def _call(operation: str, payload: dict) -> dict:
+    """POST one gateway operation; return the parsed JSON response.
+
+    Never interprets or filters the data (FR-28) — errors are passed through
+    as the gateway's opaque {'error': ...} envelope plus the HTTP status.
+    """
+    base_url = os.environ.get('UCS_AI_URL', '').rstrip('/')
+    pat = os.environ.get('UCS_AI_PAT', '')
+    if not base_url or not pat:
+        return {'error': 'adapter_not_configured',
+                'detail': 'Set the UCS_AI_URL and UCS_AI_PAT environment variables.'}
+    parsed_url = urllib.parse.urlparse(base_url)
+    if parsed_url.scheme not in ('http', 'https') or not parsed_url.netloc:
+        return {'error': 'adapter_not_configured',
+                'detail': 'UCS_AI_URL must be an HTTP or HTTPS base URL.'}
+    headers = {
+        'Content-Type': 'application/json',
+        # The PAT travels only in this header, never in URL or body.
+        'Authorization': 'Bearer ' + pat,
+    }
+    database = os.environ.get('UCS_AI_DB')
+    if database:
+        headers['X-Odoo-Database'] = database
+    request = urllib.request.Request(  # noqa: S310 -- scheme validated above
+        base_url + GATEWAY_PREFIX + '/' + operation,
+        data=json.dumps({k: v for k, v in payload.items() if v is not None}).encode(),
+        headers=headers,
+        method='POST',
+    )
+    try:
+        with urllib.request.urlopen(  # noqa: S310 -- scheme validated above
+            request, timeout=TIMEOUT,
+        ) as response:
+            return json.loads(response.read().decode())
+    except urllib.error.HTTPError as exc:
+        try:
+            body = json.loads(exc.read().decode())
+        except Exception:
+            body = {'error': 'http_%s' % exc.code}
+        body.setdefault('status', exc.code)
+        return body
+    except urllib.error.URLError as exc:
+        return {'error': 'connection_failed', 'detail': str(exc.reason)}
+    except Exception as exc:
+        return {'error': 'adapter_error', 'detail': str(exc)}
+
+
+@mcp.tool()
+def list_models() -> dict:
+    """List the Odoo models this token may read (technical name and label)."""
+    return _call('list_models', {})
+
+
+@mcp.tool()
+def describe_model(model: str) -> dict:
+    """Schema of one allowed model: readable fields with type, label, help,
+    relation and selection values. Fields not listed here are not accessible."""
+    return _call('describe_model', {'model': model})
+
+
+@mcp.tool()
+def search_read(model: str, fields: list[str] | None = None,
+                domain: list | None = None, order: str | None = None,
+                limit: int | None = None, offset: int | None = None,
+                with_count: bool = False) -> dict:
+    """Read records of an allowed model.
+
+    fields: allowed field names (defaults to every allowed field).
+    domain: Odoo search domain, e.g. [["state", "=", "sale"]] — leaves may
+    only reference allowed fields of THIS model (no dotted paths).
+    order: e.g. "date_order desc". limit/offset paginate (server caps limit).
+    with_count: also return the total match count.
+    """
+    return _call('search_read', {
+        'model': model, 'fields': fields, 'domain': domain, 'order': order,
+        'limit': limit, 'offset': offset,
+        'with_count': with_count or None,
+    })
+
+
+@mcp.tool()
+def read_group(model: str, groupby: list[str], aggregates: list[str] | None = None,
+               domain: list | None = None, order: str | None = None,
+               limit: int | None = None, offset: int | None = None) -> dict:
+    """Group and aggregate records of an allowed model.
+
+    groupby: e.g. ["partner_id"] or ["date_order:month"] (date granularity).
+    aggregates: e.g. ["amount_total:sum", "__count"] — allowed fields only.
+    """
+    return _call('read_group', {
+        'model': model, 'groupby': groupby, 'aggregates': aggregates,
+        'domain': domain, 'order': order, 'limit': limit, 'offset': offset,
+    })
+
+
+@mcp.tool()
+def count(model: str, domain: list | None = None) -> dict:
+    """Count records of an allowed model matching a domain."""
+    return _call('count', {'model': model, 'domain': domain})
+
+
+@mcp.tool()
+def post_log_note(model: str, res_id: int, body: str,
+                  notify_self: bool = False) -> dict:
+    """Post a plain-text chatter log note on a readable record.
+
+    The server must explicitly enable log notes on the token's scope. The note
+    is authored by the UCS AI bot; notify_self adds the PAT-bound user as the
+    sole recipient.
+    """
+    return _call('post_log_note', {
+        'model': model,
+        'res_id': res_id,
+        'body': body,
+        'notify_self': notify_self,
+    })
+
+
+if __name__ == '__main__':
+    mcp.run()

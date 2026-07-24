@@ -94,6 +94,34 @@ minimal (no long-running process, no extra protocol), transparent (every call
 is a visible shell command in the transcript), and the server-side audit trail
 still captures everything.
 
+## Alternative: the MCP adapter
+
+For clients that prefer the MCP protocol over the CLI, the repository also
+ships [`ucs_ai_mcp_server.py`](ucs_ai_mcp_server.py) — a thin, resident MCP
+server exposing the same six gateway tools. It carries PEP 723 inline
+metadata, so with [uv](https://docs.astral.sh/uv/) it runs straight from its
+URL, nothing to clone or install:
+
+```bash
+claude mcp add ucs-ai \
+  --env UCS_AI_URL=https://your-odoo.example.com \
+  --env UCS_AI_PAT=<the token> \
+  -- uv run https://raw.githubusercontent.com/UCS-One-Business/odoo_ai_connector/main/ucs_ai_mcp_server.py
+```
+
+Or in `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.ucs_ai]
+command = "uv"
+args = ["run", "https://raw.githubusercontent.com/UCS-One-Business/odoo_ai_connector/main/ucs_ai_mcp_server.py"]
+env = { UCS_AI_URL = "https://your-odoo.example.com", UCS_AI_PAT = "<the token>" }
+```
+
+Like the CLI, the adapter is an untrusted translator: it makes no access
+decision, and every allow/deny happens server-side in Odoo. `UCS_AI_DB` is
+only needed on multi-database servers.
+
 ## Security model, in one paragraph
 
 The token is shown once at creation, stored hashed in Odoo, expires on a
