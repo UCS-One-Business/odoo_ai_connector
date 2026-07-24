@@ -26,20 +26,39 @@ changes nothing about what it can see.
 With [uv](https://docs.astral.sh/uv/) (recommended — no setup needed):
 
 ```bash
-uv tool install git+https://github.com/UCS-One-Business/odoo_ai_connector
+uv tool install git+https://github.com/UCS-One-Business/odoo_ai_connector@v1.1.0
 ```
 
 With pip/pipx:
 
 ```bash
-pipx install git+https://github.com/UCS-One-Business/odoo_ai_connector
+pipx install git+https://github.com/UCS-One-Business/odoo_ai_connector@v1.1.0
 ```
 
 Or run without installing at all:
 
 ```bash
-uvx --from git+https://github.com/UCS-One-Business/odoo_ai_connector ucs-ai --help
+uvx --from git+https://github.com/UCS-One-Business/odoo_ai_connector@v1.1.0 ucs-ai --help
 ```
+
+## Versioning & upgrading
+
+Releases are git tags (`vX.Y.Z`, [SemVer](https://semver.org/)) with notes in
+[CHANGELOG.md](CHANGELOG.md). Check what you are running and upgrade with:
+
+```bash
+ucs-ai --version
+uv tool install --force git+https://github.com/UCS-One-Business/odoo_ai_connector@v1.1.0
+```
+
+For the MCP adapter, the version is pinned in the URL your MCP client is
+registered with — re-register with the new tag's URL to upgrade (`uv run`
+`--version` on the URL prints it). The connector sends its version as the
+`User-Agent` on every request, so your Odoo administrator can see outdated
+clients in the gateway audit trail. The gateway API itself is versioned
+independently by its URL prefix (`/v1`): within one prefix the server only
+evolves backwards-compatibly, so an older connector keeps working until the
+prefix itself is retired.
 
 ## Connect
 
@@ -106,7 +125,7 @@ URL, nothing to clone or install:
 claude mcp add ucs-ai \
   --env UCS_AI_URL=https://your-odoo.example.com \
   --env UCS_AI_PAT=<the token> \
-  -- uv run https://raw.githubusercontent.com/UCS-One-Business/odoo_ai_connector/main/ucs_ai_mcp_server.py
+  -- uv run https://raw.githubusercontent.com/UCS-One-Business/odoo_ai_connector/v1.1.0/ucs_ai_mcp_server.py
 ```
 
 Or in `~/.codex/config.toml`:
@@ -114,7 +133,7 @@ Or in `~/.codex/config.toml`:
 ```toml
 [mcp_servers.ucs_ai]
 command = "uv"
-args = ["run", "https://raw.githubusercontent.com/UCS-One-Business/odoo_ai_connector/main/ucs_ai_mcp_server.py"]
+args = ["run", "https://raw.githubusercontent.com/UCS-One-Business/odoo_ai_connector/v1.1.0/ucs_ai_mcp_server.py"]
 env = { UCS_AI_URL = "https://your-odoo.example.com", UCS_AI_PAT = "<the token>" }
 ```
 

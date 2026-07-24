@@ -32,8 +32,13 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+from . import __version__
+
 GATEWAY_PREFIX = "/ucs_ai/gateway/v1"
 TIMEOUT = 60
+# Sent on every request so the gateway's audit trail records which client
+# versions are in the wild (informs when an upgrade campaign is needed).
+USER_AGENT = "ucs-ai-connector/%s" % __version__
 
 CONFIG_DIR = os.path.join(
     os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"),
@@ -117,6 +122,7 @@ def _call(url: str, token: str, database: str | None,
         _fail("not_configured", "The Odoo URL must be an HTTP(S) base URL.")
     headers = {
         "Content-Type": "application/json",
+        "User-Agent": USER_AGENT,
         # The token travels only in this header, never in URL or body.
         "Authorization": "Bearer " + token,
     }
@@ -308,6 +314,8 @@ def build_parser() -> argparse.ArgumentParser:
                "-> 'ucs-ai read/group/count'. See 'ucs-ai skill' for the "
                "full agent skill.",
     )
+    parser.add_argument("--version", action="version",
+                        version="ucs-ai-connector %s" % __version__)
     sub = parser.add_subparsers(dest="command", required=True)
 
     p = sub.add_parser("connect", help="verify a token and save it as a profile")

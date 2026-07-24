@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ucs-ai-connector"
-version = "1.0.0"
+dynamic = ["version"]
 description = "CLI connector for the UCS AI gateway: scoped, read-only access to live Odoo ERP data for AI agents."
 readme = "README.md"
 license = "Apache-2.0"
@@ -31,3 +31,6 @@ ucs-ai = "ucs_ai_connector.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["ucs_ai_connector"]
+
+[tool.hatch.version]
+path = "ucs_ai_connector/__init__.py"

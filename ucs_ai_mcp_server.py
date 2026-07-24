@@ -47,6 +47,12 @@ except ImportError:  # pragma: no cover
 
 GATEWAY_PREFIX = '/ucs_ai/gateway/v1'
 TIMEOUT = 60
+# Kept in lockstep with ucs_ai_connector.__version__ (this script must stay
+# standalone-runnable from a URL, so the constant is duplicated here; the
+# release script asserts they match). Advertised in the MCP initialize
+# handshake and sent as User-Agent so the gateway audit trail records it.
+__version__ = '1.1.0'
+USER_AGENT = 'ucs-ai-mcp/%s' % __version__
 
 mcp = FastMCP(
     "ucs-ai",
@@ -79,6 +85,7 @@ def _call(operation: str, payload: dict) -> dict:
                 'detail': 'UCS_AI_URL must be an HTTP or HTTPS base URL.'}
     headers = {
         'Content-Type': 'application/json',
+        'User-Agent': USER_AGENT,
         # The PAT travels only in this header, never in URL or body.
         'Authorization': 'Bearer ' + pat,
     }
@@ -181,4 +188,10 @@ def post_log_note(model: str, res_id: int, body: str,
 
 
 if __name__ == '__main__':
+    if '--version' in sys.argv:
+        print('ucs-ai-mcp %s' % __version__)
+        sys.exit(0)
+    # FastMCP has no version parameter; set it on the underlying server so
+    # the MCP initialize handshake reports it to clients.
+    mcp._mcp_server.version = __version__
     mcp.run()
