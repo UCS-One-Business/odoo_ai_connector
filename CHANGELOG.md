@@ -25,6 +25,13 @@ prefix (`/ucs_ai/gateway/v1`); the connector only ever speaks one prefix.
   writable set is narrower than the readable one, there is no batch write, and
   the daily write budget returns `429` when spent.
 
+### Fixed
+- MCP adapter: constrain the dependency to `mcp>=1.0,<2`. mcp 2.0.0 removed
+  `mcp.server.fastmcp`, so the open `>=1.0` range made `uv run` on the
+  published URL exit with "the 'mcp' package is required" as soon as 2.x was
+  released — v1.1.0 is affected too, since that URL resolves the SDK fresh on
+  every run.
+
 ## [1.1.0] - 2026-07-24
 
 ### Added

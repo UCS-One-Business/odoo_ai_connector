@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # /// script
 # requires-python = ">=3.10"
-# dependencies = ["mcp>=1.0"]
+# dependencies = ["mcp>=1.0,<2"]
 # ///
 """Thin MCP adapter for the ucs_ai gateway (PRD FR-27..FR-29, NFR-15).
 
@@ -26,7 +26,9 @@ above resolves the dependency automatically — no venv or pip step:
 
     UCS_AI_URL=https://... UCS_AI_PAT=... uv run ucs_ai_mcp_server.py
 
-Without uv, install the official MCP python SDK first (pip install "mcp>=1.0"):
+Without uv, install the official MCP python SDK first
+(pip install "mcp>=1.0,<2" — mcp 2.x dropped the FastMCP entry point this
+adapter builds on):
 
     UCS_AI_URL=https://... UCS_AI_PAT=... python3 ucs_ai_mcp_server.py
 
@@ -43,7 +45,8 @@ import urllib.request
 try:
     from mcp.server.fastmcp import FastMCP
 except ImportError:  # pragma: no cover
-    sys.exit("The 'mcp' package is required: pip install 'mcp>=1.0'")
+    sys.exit("The MCP python SDK 1.x is required: pip install 'mcp>=1.0,<2' "
+             "(2.x removed mcp.server.fastmcp)")
 
 GATEWAY_PREFIX = '/ucs_ai/gateway/v1'
 TIMEOUT = 60
