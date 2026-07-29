@@ -284,6 +284,21 @@ def _cmd_count(args: argparse.Namespace) -> None:
     })
 
 
+def _cmd_create(args: argparse.Namespace) -> None:
+    _run(args, "create_record", {
+        "model": args.model,
+        "values": _parse_json_arg(args.values, "values"),
+    })
+
+
+def _cmd_update(args: argparse.Namespace) -> None:
+    _run(args, "update_record", {
+        "model": args.model,
+        "res_id": args.id,
+        "values": _parse_json_arg(args.values, "values"),
+    })
+
+
 def _cmd_note(args: argparse.Namespace) -> None:
     _run(args, "post_log_note", {
         "model": args.model,
@@ -382,9 +397,30 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=_cmd_count)
 
     p = sub.add_parser(
+        "create",
+        help="create ONE record (the scope must opt in per model; the record "
+             "gets a chatter note naming this token)")
+    p.add_argument("model")
+    p.add_argument("values",
+                   help='JSON object of writable fields, e.g. \'{"name": "Fix login"}\'')
+    _add_credential_options(p)
+    p.set_defaults(func=_cmd_create)
+
+    p = sub.add_parser(
+        "update",
+        help="update ONE record by id (the scope must opt in per model and "
+             "per field; old and new values land in the chatter)")
+    p.add_argument("model")
+    p.add_argument("id", type=int, help="record id")
+    p.add_argument("values",
+                   help='JSON object of writable fields, e.g. \'{"priority": "1"}\'')
+    _add_credential_options(p)
+    p.set_defaults(func=_cmd_update)
+
+    p = sub.add_parser(
         "note",
         help="post a plain-text chatter log note on a readable record "
-             "(the only write; the token's scope must opt in)")
+             "(the token's scope must opt in)")
     p.add_argument("model")
     p.add_argument("id", type=int, help="record id")
     p.add_argument("body", help="plain text, max 10000 characters")

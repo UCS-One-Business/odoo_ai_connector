@@ -51,7 +51,7 @@ TIMEOUT = 60
 # standalone-runnable from a URL, so the constant is duplicated here; the
 # release script asserts they match). Advertised in the MCP initialize
 # handshake and sent as User-Agent so the gateway audit trail records it.
-__version__ = '1.1.0'
+__version__ = '1.2.0'
 USER_AGENT = 'ucs-ai-mcp/%s' % __version__
 
 mcp = FastMCP(
@@ -62,8 +62,10 @@ mcp = FastMCP(
         "the schema of a model. Only the models and fields returned by those "
         "tools are readable; requests outside that scope are denied by the "
         "server. Domains, order, group-by and aggregates may only reference "
-        "allowed fields, and dotted/related paths are rejected. post_log_note "
-        "is the only write tool and works only when the scope opts in."
+        "allowed fields, and dotted/related paths are rejected. The three "
+        "write tools (post_log_note, create_record, update_record) are each "
+        "opted in separately by the server, touch one record per call, cannot "
+        "delete or archive anything, and post a chatter note naming the token."
     ),
 )
 
@@ -184,6 +186,34 @@ def post_log_note(model: str, res_id: int, body: str,
         'res_id': res_id,
         'body': body,
         'notify_self': notify_self,
+    })
+
+
+@mcp.tool()
+def create_record(model: str, values: dict) -> dict:
+    """Create exactly one record of a model the scope allows creating.
+
+    ``values`` may set only the model's writable fields, which are a subset of
+    the readable ones. one2many values are rejected and many2many values may
+    only link or unlink existing records, so no other record is ever created or
+    deleted. The new record gets a chatter note naming the token. Returns the
+    new record's id.
+    """
+    return _call('create_record', {'model': model, 'values': values})
+
+
+@mcp.tool()
+def update_record(model: str, res_id: int, values: dict) -> dict:
+    """Update exactly one existing record, addressed by id.
+
+    Same field rules as create_record. There is no batch or domain-based write,
+    and `active` cannot be written, so nothing can be deleted or archived. The
+    record's chatter gets a note listing each field's previous and new value.
+    """
+    return _call('update_record', {
+        'model': model,
+        'res_id': res_id,
+        'values': values,
     })
 
 

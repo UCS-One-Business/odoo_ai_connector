@@ -8,8 +8,8 @@ description: >
 
 # UCS AI — ERP data access
 
-The `ucs-ai` CLI gives scoped, mostly read-only access to a live Odoo
-database. Every command prints JSON. Access control lives entirely on the
+The `ucs-ai` CLI gives scoped access to a live Odoo database: reads by
+default, plus a few narrow write operations where an administrator opted in. Every command prints JSON. Access control lives entirely on the
 server: an administrator granted this token an allow-list of models and
 fields, intersected with a real user's permissions. Anything outside that
 list returns `403 forbidden` — that is normal, not an error to work around.
@@ -49,15 +49,37 @@ ucs-ai count res.partner --domain '[["customer_rank", ">", 0]]'
 - Many2one fields return `[id, "display name"]` pairs; use the id to read
   the related model if it is in your scope.
 
-## Writing (only one operation)
+## Writing (three operations, each opted in separately)
+
+Everything below is off by default and granted per model by an administrator.
+A `403` here means the capability was not granted — say so, do not retry.
 
 ```bash
+# Chatter note (scope-wide opt-in)
 ucs-ai note sale.order 42 "Reviewed by the agent." --notify-self
+
+# Create ONE record
+ucs-ai create project.task '{"name": "Fix login redirect", "description": "..."}'
+
+# Update ONE record by id
+ucs-ai update project.task 87 '{"priority": "1"}'
 ```
 
-Posts a plain-text chatter log note, authored by the UCS AI bot. It works
-only if the administrator enabled log notes for this token's scope. There is
-no other write: no create, update, delete, or method call exists.
+Rules worth knowing before you try:
+
+- **Only writable fields.** They are a subset of the readable ones, chosen per
+  model. `describe <model>` lists what is readable, not what is writable, so a
+  readable field can still be refused.
+- **One record per call.** There is no batch or domain-based write. Loop
+  deliberately, and stay well under the daily write budget (default 50 per
+  token per day; exceeding it returns `429`).
+- **Nothing is ever deleted or archived.** `active` cannot be written, and
+  relational values may only link or unlink existing records, never create or
+  delete them.
+- **Every write is visible.** Creating or updating posts a chatter note naming
+  this token, and updates list each field's previous and new value. Write as if
+  the record's owner will read it, because they will.
+- No delete, no archiving, no method calls, no workflow buttons exist.
 
 ## Errors
 

@@ -12,6 +12,19 @@ and versions follow [Semantic Versioning](https://semver.org/):
 The server-side API contract is versioned independently by the gateway URL
 prefix (`/ucs_ai/gateway/v1`); the connector only ever speaks one prefix.
 
+## [1.2.0] - unreleased, on branch `dev`
+
+### Added
+- `ucs-ai create <model> <values-json>` and `ucs-ai update <model> <id>
+  <values-json>`, plus the matching `create_record` / `update_record` MCP
+  tools, for the gateway's new per-model write capability. Each call touches
+  exactly one record, may set only fields the scope marks writable, cannot
+  delete or archive anything, and leaves a chatter note naming the token.
+  Requires ucs_ai 19.0.6.2.0 or later on the server.
+- `SKILL.md` documents the write rules an agent needs before it tries: the
+  writable set is narrower than the readable one, there is no batch write, and
+  the daily write budget returns `429` when spent.
+
 ## [1.1.0] - 2026-07-24
 
 ### Added
