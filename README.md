@@ -98,8 +98,10 @@ ucs-ai read sale.order --fields name,amount_total \
 ucs-ai group sale.order --by partner_id --agg amount_total:sum
 ucs-ai count res.partner --domain '[["customer_rank", ">", 0]]'
 ucs-ai note sale.order 42 "Reviewed."           # writes: each needs a scope opt-in
-ucs-ai write project.task '{"name": "Fix login"}'      # proposes a NEW record
-ucs-ai write project.task '{"priority": "1"}' --id 87  # proposes a change
+ucs-ai write project.task '{"name": "Fix login"}' \
+    --reason "Reported twice in #support today; no task exists yet."
+ucs-ai write project.task '{"priority": "1"}' --id 87 \
+    --reason "Customer says production is down."   # --id makes it a change
 ucs-ai requests                                 # what did the human decide?
 ```
 

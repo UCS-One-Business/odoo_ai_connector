@@ -197,7 +197,8 @@ def post_log_note(model: str, res_id: int, body: str,
 
 
 @mcp.tool()
-def write(model: str, values: dict, res_id: int | None = None) -> dict:
+def write(model: str, values: dict, reason: str,
+          res_id: int | None = None) -> dict:
     """Propose ONE record change and send it to a human for approval.
 
     NOTHING IS CHANGED WHEN THIS RETURNS. It queues the proposal and returns a
@@ -210,8 +211,12 @@ def write(model: str, values: dict, res_id: int | None = None) -> dict:
     the readable ones. one2many values are rejected and many2many values may
     only link or unlink existing records, so no other record is ever touched,
     and `active` cannot be written, so nothing can be archived or deleted.
+
+    ``reason`` is required: one or two sentences for the person who will
+    approve this, saying what the field values do not say, such as what
+    prompted the change or what you concluded. Do not restate the values.
     """
-    payload = {'model': model, 'values': values}
+    payload = {'model': model, 'values': values, 'reason': reason}
     if res_id is not None:
         payload['res_id'] = res_id
     return _call('write', payload)

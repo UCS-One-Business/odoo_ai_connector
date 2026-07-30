@@ -290,6 +290,7 @@ def _cmd_write(args: argparse.Namespace) -> None:
     payload = {
         "model": args.model,
         "values": _parse_json_arg(args.values, "values"),
+        "reason": args.reason,
     }
     if args.id is not None:
         payload["res_id"] = args.id
@@ -412,6 +413,10 @@ def build_parser() -> argparse.ArgumentParser:
                    help='JSON object of writable fields, e.g. \'{"name": "Fix login"}\'')
     p.add_argument("--id", type=int,
                    help="record id to change; omit to propose a NEW record")
+    p.add_argument("--reason", required=True,
+                   help="why you are asking, for the person who approves it. "
+                        "They can already see the values; say what those do "
+                        "not, such as what prompted the change.")
     _add_credential_options(p)
     p.set_defaults(func=_cmd_write)
 

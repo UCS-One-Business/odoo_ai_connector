@@ -15,9 +15,12 @@ prefix (`/ucs_ai/gateway/v1`); the connector only ever speaks one prefix.
 ## [1.2.0] - unreleased, on branch `dev`
 
 ### Added
-- `ucs-ai write <model> <values-json> [--id N]` and `ucs-ai requests`, plus the
-  matching `write` / `list_write_requests` MCP tools, for the gateway's new
-  human-approved write capability. `write` **changes nothing**: it queues a
+- `ucs-ai write <model> <values-json> --reason TEXT [--id N]` and
+  `ucs-ai requests`, plus the matching `write` / `list_write_requests` MCP
+  tools, for the gateway's new human-approved write capability. `--reason` is
+  required and reaches the reviewer above the diff: the field values say what
+  would change, never why, which is what a person actually has to judge.
+  `write` **changes nothing**: it queues a
   proposal for a person to approve in Odoo and returns a pending `request_id`;
   `requests` reads back the decision, including the reviewer's rejection note.
   Omitting `--id` proposes a new record, passing it proposes a change to that
