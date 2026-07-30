@@ -49,36 +49,54 @@ ucs-ai count res.partner --domain '[["customer_rank", ">", 0]]'
 - Many2one fields return `[id, "display name"]` pairs; use the id to read
   the related model if it is in your scope.
 
-## Writing (three operations, each opted in separately)
+## Writing — every record change needs a human's approval
 
-Everything below is off by default and granted per model by an administrator.
-A `403` here means the capability was not granted — say so, do not retry.
+**`write` changes nothing.** It queues a proposal and returns
+`{"request_id": N, "state": "pending"}`. A person then approves or rejects it in
+Odoo. **Never tell the user the change is done.** Say you have requested it and
+that it is waiting for their approval, give them the request id, and check back
+with `requests`.
+
+Writing is off by default and granted per model by an administrator. A `403`
+means the capability was not granted — say so, do not retry.
 
 ```bash
-# Chatter note (scope-wide opt-in)
+# Chatter note — the one write that is NOT queued (scope-wide opt-in)
 ucs-ai note sale.order 42 "Reviewed by the agent." --notify-self
 
-# Create ONE record
-ucs-ai create project.task '{"name": "Fix login redirect", "description": "..."}'
+# Propose a NEW record (no --id)
+ucs-ai write project.task '{"name": "Fix login redirect", "description": "..."}'
 
-# Update ONE record by id
-ucs-ai update project.task 87 '{"priority": "1"}'
+# Propose a change to record 87
+ucs-ai write project.task '{"priority": "1"}' --id 87
+
+# What did the human decide?
+ucs-ai requests --state pending
+ucs-ai requests
 ```
 
 Rules worth knowing before you try:
 
+- **Read the outcome, do not assume it.** `requests` returns each proposal's
+  state: `pending`, `applied`, `rejected` or `failed`. A rejection carries the
+  reviewer's note and a failure its reason — that is your feedback, use it
+  rather than resubmitting the same thing.
 - **Only writable fields.** They are a subset of the readable ones, chosen per
   model. `describe <model>` lists what is readable, not what is writable, so a
   readable field can still be refused.
-- **One record per call.** There is no batch or domain-based write. Loop
-  deliberately, and stay well under the daily write budget (default 50 per
-  token per day; exceeding it returns `429`).
+- **One record per proposal.** There is no batch or domain-based write. Do not
+  queue up dozens of proposals a person then has to wade through; the daily
+  budget (default 50 per token per day, then `429`) exists for that reason.
 - **Nothing is ever deleted or archived.** `active` cannot be written, and
   relational values may only link or unlink existing records, never create or
   delete them.
-- **Every write is visible.** Creating or updating posts a chatter note naming
-  this token, and updates list each field's previous and new value. Write as if
-  the record's owner will read it, because they will.
+- **Every applied change is visible.** It posts a chatter note naming this
+  token, the user it acted as, and the human who approved it; updates list each
+  field's previous and new value. Write as if the record's owner will read it,
+  because they will.
+- **Approval is not a way around the scope.** The proposal is re-checked when
+  it is approved, so a change refused now stays refused, and the approver has
+  to be someone who could have made the change by hand anyway.
 - No delete, no archiving, no method calls, no workflow buttons exist.
 
 ## Errors

@@ -65,10 +65,14 @@ mcp = FastMCP(
         "the schema of a model. Only the models and fields returned by those "
         "tools are readable; requests outside that scope are denied by the "
         "server. Domains, order, group-by and aggregates may only reference "
-        "allowed fields, and dotted/related paths are rejected. The three "
-        "write tools (post_log_note, create_record, update_record) are each "
-        "opted in separately by the server, touch one record per call, cannot "
-        "delete or archive anything, and post a chatter note naming the token."
+        "allowed fields, and dotted/related paths are rejected. Writing is "
+        "opted in separately by the server and always goes through human "
+        "approval: `write` PROPOSES one record change and returns a pending "
+        "request, it does not apply it. Never tell the user a change has been "
+        "made — say you have requested it and that it is waiting for their "
+        "approval, then use list_write_requests to find out what they decided. "
+        "Nothing can be deleted or archived, and every approved change posts a "
+        "chatter note naming the token and the approver."
     ),
 )
 
@@ -193,31 +197,42 @@ def post_log_note(model: str, res_id: int, body: str,
 
 
 @mcp.tool()
-def create_record(model: str, values: dict) -> dict:
-    """Create exactly one record of a model the scope allows creating.
+def write(model: str, values: dict, res_id: int | None = None) -> dict:
+    """Propose ONE record change and send it to a human for approval.
 
+    NOTHING IS CHANGED WHEN THIS RETURNS. It queues the proposal and returns a
+    request_id in state 'pending'; a person then approves or rejects it in Odoo.
+    Tell the user you have requested the change and that it needs their
+    approval — never report it as done. Use list_write_requests for the outcome.
+
+    Omit res_id to propose a NEW record, or pass res_id to change that one.
     ``values`` may set only the model's writable fields, which are a subset of
     the readable ones. one2many values are rejected and many2many values may
-    only link or unlink existing records, so no other record is ever created or
-    deleted. The new record gets a chatter note naming the token. Returns the
-    new record's id.
+    only link or unlink existing records, so no other record is ever touched,
+    and `active` cannot be written, so nothing can be archived or deleted.
     """
-    return _call('create_record', {'model': model, 'values': values})
+    payload = {'model': model, 'values': values}
+    if res_id is not None:
+        payload['res_id'] = res_id
+    return _call('write', payload)
 
 
 @mcp.tool()
-def update_record(model: str, res_id: int, values: dict) -> dict:
-    """Update exactly one existing record, addressed by id.
+def list_write_requests(states: list[str] | None = None,
+                        limit: int | None = None) -> dict:
+    """Your own write proposals and what happened to them.
 
-    Same field rules as create_record. There is no batch or domain-based write,
-    and `active` cannot be written, so nothing can be deleted or archived. The
-    record's chatter gets a note listing each field's previous and new value.
+    States are 'pending', 'applied', 'rejected' and 'failed'. Rejected and
+    failed entries carry the reviewer's note or the reason, which is how you
+    learn what was wrong with a proposal. Only this token's requests are
+    visible.
     """
-    return _call('update_record', {
-        'model': model,
-        'res_id': res_id,
-        'values': values,
-    })
+    payload: dict = {}
+    if states:
+        payload['states'] = states
+    if limit:
+        payload['limit'] = limit
+    return _call('list_write_requests', payload)
 
 
 if __name__ == '__main__':

@@ -284,19 +284,25 @@ def _cmd_count(args: argparse.Namespace) -> None:
     })
 
 
-def _cmd_create(args: argparse.Namespace) -> None:
-    _run(args, "create_record", {
+def _cmd_write(args: argparse.Namespace) -> None:
+    # No --id means create; --id means update that record. The gateway infers
+    # the same way, so this command has no mode flag to get wrong.
+    payload = {
         "model": args.model,
         "values": _parse_json_arg(args.values, "values"),
-    })
+    }
+    if args.id is not None:
+        payload["res_id"] = args.id
+    _run(args, "write", payload)
 
 
-def _cmd_update(args: argparse.Namespace) -> None:
-    _run(args, "update_record", {
-        "model": args.model,
-        "res_id": args.id,
-        "values": _parse_json_arg(args.values, "values"),
-    })
+def _cmd_requests(args: argparse.Namespace) -> None:
+    payload: dict = {}
+    if args.state:
+        payload["states"] = [s.strip() for s in args.state.split(",") if s.strip()]
+    if args.limit:
+        payload["limit"] = args.limit
+    _run(args, "list_write_requests", payload)
 
 
 def _cmd_note(args: argparse.Namespace) -> None:
@@ -397,25 +403,27 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=_cmd_count)
 
     p = sub.add_parser(
-        "create",
-        help="create ONE record (the scope must opt in per model; the record "
-             "gets a chatter note naming this token)")
+        "write",
+        help="REQUEST a record change — creates a new record without --id, or "
+             "changes that one with --id. Nothing is written: a human approves "
+             "it in Odoo first. Check the outcome with 'ucs-ai requests'.")
     p.add_argument("model")
     p.add_argument("values",
                    help='JSON object of writable fields, e.g. \'{"name": "Fix login"}\'')
+    p.add_argument("--id", type=int,
+                   help="record id to change; omit to propose a NEW record")
     _add_credential_options(p)
-    p.set_defaults(func=_cmd_create)
+    p.set_defaults(func=_cmd_write)
 
     p = sub.add_parser(
-        "update",
-        help="update ONE record by id (the scope must opt in per model and "
-             "per field; old and new values land in the chatter)")
-    p.add_argument("model")
-    p.add_argument("id", type=int, help="record id")
-    p.add_argument("values",
-                   help='JSON object of writable fields, e.g. \'{"priority": "1"}\'')
+        "requests",
+        help="list this token's own write requests and what a human decided "
+             "about them (pending, applied, rejected, failed)")
+    p.add_argument("--state",
+                   help="comma-separated states to show, e.g. 'pending'")
+    p.add_argument("--limit", type=int, help="max entries (server caps this)")
     _add_credential_options(p)
-    p.set_defaults(func=_cmd_update)
+    p.set_defaults(func=_cmd_requests)
 
     p = sub.add_parser(
         "note",

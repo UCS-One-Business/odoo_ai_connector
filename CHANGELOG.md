@@ -15,15 +15,28 @@ prefix (`/ucs_ai/gateway/v1`); the connector only ever speaks one prefix.
 ## [1.2.0] - unreleased, on branch `dev`
 
 ### Added
-- `ucs-ai create <model> <values-json>` and `ucs-ai update <model> <id>
-  <values-json>`, plus the matching `create_record` / `update_record` MCP
-  tools, for the gateway's new per-model write capability. Each call touches
-  exactly one record, may set only fields the scope marks writable, cannot
-  delete or archive anything, and leaves a chatter note naming the token.
-  Requires ucs_ai 19.0.6.2.0 or later on the server.
-- `SKILL.md` documents the write rules an agent needs before it tries: the
-  writable set is narrower than the readable one, there is no batch write, and
-  the daily write budget returns `429` when spent.
+- `ucs-ai write <model> <values-json> [--id N]` and `ucs-ai requests`, plus the
+  matching `write` / `list_write_requests` MCP tools, for the gateway's new
+  human-approved write capability. `write` **changes nothing**: it queues a
+  proposal for a person to approve in Odoo and returns a pending `request_id`;
+  `requests` reads back the decision, including the reviewer's rejection note.
+  Omitting `--id` proposes a new record, passing it proposes a change to that
+  one. A proposal may set only fields the scope marks writable, cannot delete
+  or archive anything, and once approved leaves a chatter note naming the
+  token, the bound user and the approver.
+  Requires ucs_ai 19.0.6.4.0 or later on the server.
+- `SKILL.md` documents the write rules an agent needs before it tries: that a
+  queued change must never be reported as done, that the writable set is
+  narrower than the readable one, that there is no batch write, and that the
+  daily budget returns `429` when spent.
+
+### Changed
+- **Breaking, pre-release only.** The `create` and `update` commands (and the
+  `create_record` / `update_record` MCP tools) added earlier on this same
+  unreleased branch are replaced by the single `write`. They never shipped in a
+  tagged release, so no installed client is affected. Merging them is what the
+  approval queue makes natural: from the caller's side the only difference left
+  is whether a record id is given.
 
 ### Fixed
 - MCP adapter: constrain the dependency to `mcp>=1.0,<2`. mcp 2.0.0 removed

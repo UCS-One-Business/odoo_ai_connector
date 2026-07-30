@@ -42,8 +42,8 @@ uvx --from git+https://github.com/UCS-One-Business/odoo_ai_connector@v1.1.0 ucs-
 ```
 
 Swap the tag for `@dev` to get the unreleased branch, needed for anything
-[CHANGELOG.md](CHANGELOG.md) lists as unreleased (currently the `create` and
-`update` write commands). A branch ref is mutable, so re-install with
+[CHANGELOG.md](CHANGELOG.md) lists as unreleased (currently the `write` and
+`requests` commands). A branch ref is mutable, so re-install with
 `--force` to pick up new commits.
 
 ## Versioning & upgrading
@@ -98,8 +98,9 @@ ucs-ai read sale.order --fields name,amount_total \
 ucs-ai group sale.order --by partner_id --agg amount_total:sum
 ucs-ai count res.partner --domain '[["customer_rank", ">", 0]]'
 ucs-ai note sale.order 42 "Reviewed."           # writes: each needs a scope opt-in
-ucs-ai create project.task '{"name": "Fix login"}'
-ucs-ai update project.task 87 '{"priority": "1"}'
+ucs-ai write project.task '{"name": "Fix login"}'      # proposes a NEW record
+ucs-ai write project.task '{"priority": "1"}' --id 87  # proposes a change
+ucs-ai requests                                 # what did the human decide?
 ```
 
 All output is JSON. Anything outside the token's scope returns an opaque
@@ -153,14 +154,17 @@ only needed on multi-database servers.
 The token is shown once at creation, stored hashed in Odoo, expires on a
 mandatory date, and is revocable at any time. Effective access is always the
 *intersection* of the token's scope with the bound user's native Odoo rights —
-the connector can narrow access, never widen it. The gateway exposes five read
-operations and three writes, each off by default and opted into per scope: a
-bot-authored chatter log note, a single-record create, and a single-record
-update by id. Writes may set only fields the scope marks writable, touch one
-record per call, cannot delete or archive anything, and post a chatter note
-naming the token. There is no generic ORM write, batch write, method call,
-attachment, or login path. Every request — allowed or denied — is audited
-server-side.
+the connector can narrow access, never widen it. The gateway exposes six read
+operations and two writes, each off by default and opted into per scope: a
+bot-authored chatter log note, and `write`, which **modifies nothing** — it
+queues a single-record create or update for a person to approve in Odoo.
+Approving re-checks the scope from scratch and additionally requires the
+approver's own access to the record, so it can only ever narrow what the
+proposal could do, never widen it. A proposal may set only fields the scope
+marks writable, touches one record, cannot delete or archive anything, and once
+applied posts a chatter note naming the token, the bound user and the approver.
+There is no generic ORM write, batch write, method call, attachment, or login
+path. Every request — allowed or denied — is audited server-side.
 
 ## License
 
