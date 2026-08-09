@@ -12,7 +12,7 @@ and versions follow [Semantic Versioning](https://semver.org/):
 The server-side API contract is versioned independently by the gateway URL
 prefix (`/ucs_ai/gateway/v1`); the connector only ever speaks one prefix.
 
-## [1.2.0] - unreleased, on branch `dev`
+## [1.2.0] - 2026-08-09
 
 ### Added
 - `ucs-ai write <model> <values-json> --reason TEXT [--id N]` and
