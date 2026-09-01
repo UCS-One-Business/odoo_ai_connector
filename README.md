@@ -26,19 +26,19 @@ changes nothing about what it can see.
 With [uv](https://docs.astral.sh/uv/) (recommended — no setup needed):
 
 ```bash
-uv tool install git+https://github.com/UCS-One-Business/odoo_ai_connector@v1.1.0
+uv tool install git+https://github.com/UCS-One-Business/odoo_ai_connector@v1.2.0
 ```
 
 With pip/pipx:
 
 ```bash
-pipx install git+https://github.com/UCS-One-Business/odoo_ai_connector@v1.1.0
+pipx install git+https://github.com/UCS-One-Business/odoo_ai_connector@v1.2.0
 ```
 
 Or run without installing at all:
 
 ```bash
-uvx --from git+https://github.com/UCS-One-Business/odoo_ai_connector@v1.1.0 ucs-ai --help
+uvx --from git+https://github.com/UCS-One-Business/odoo_ai_connector@v1.2.0 ucs-ai --help
 ```
 
 Swap the tag for `@dev` to get the unreleased branch, needed for anything
@@ -53,7 +53,7 @@ Releases are git tags (`vX.Y.Z`, [SemVer](https://semver.org/)) with notes in
 
 ```bash
 ucs-ai --version
-uv tool install --force git+https://github.com/UCS-One-Business/odoo_ai_connector@v1.1.0
+uv tool install --force git+https://github.com/UCS-One-Business/odoo_ai_connector@v1.2.0
 ```
 
 For the MCP adapter, the version is pinned in the URL your MCP client is
@@ -135,7 +135,7 @@ URL, nothing to clone or install:
 claude mcp add ucs-ai \
   --env UCS_AI_URL=https://your-odoo.example.com \
   --env UCS_AI_PAT=<the token> \
-  -- uv run https://raw.githubusercontent.com/UCS-One-Business/odoo_ai_connector/v1.1.0/ucs_ai_mcp_server.py
+  -- uv run https://raw.githubusercontent.com/UCS-One-Business/odoo_ai_connector/v1.2.0/ucs_ai_mcp_server.py
 ```
 
 Or in `~/.codex/config.toml`:
@@ -143,7 +143,7 @@ Or in `~/.codex/config.toml`:
 ```toml
 [mcp_servers.ucs_ai]
 command = "uv"
-args = ["run", "https://raw.githubusercontent.com/UCS-One-Business/odoo_ai_connector/v1.1.0/ucs_ai_mcp_server.py"]
+args = ["run", "https://raw.githubusercontent.com/UCS-One-Business/odoo_ai_connector/v1.2.0/ucs_ai_mcp_server.py"]
 env = { UCS_AI_URL = "https://your-odoo.example.com", UCS_AI_PAT = "<the token>" }
 ```
 
