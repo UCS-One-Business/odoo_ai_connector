@@ -103,11 +103,11 @@ Rules worth knowing before you try:
 
 | Response | Meaning | What to do |
 |---|---|---|
-| `401 unauthorized` | Token missing/expired/revoked | Ask the user for a fresh token (`ucs-ai connect`) |
+| `401 unauthorized` | Sign-in/token expired or revoked | Ask the user to run `ucs-ai login` again (or `ucs-ai connect` with a fresh token) |
 | `403 forbidden` | Model/field outside scope | Use only what `models`/`describe` return; tell the user if the scope is too narrow |
 | `400 bad_request` | Malformed domain/params | Fix the query |
 | `429 rate_limited` | Too many requests | Back off, then retry |
-| `not_configured` | No saved credentials | Ask the user to run `ucs-ai connect --url ... --token ...` |
+| `not_configured` | No saved credentials | Ask the user to run `ucs-ai login --url <odoo-url>` |
 
 Denied requests are audited server-side and surface to the administrator as
 scope suggestions — so a `403` on a genuinely needed field is worth

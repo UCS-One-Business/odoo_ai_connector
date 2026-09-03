@@ -15,8 +15,10 @@ Credentials come from (highest precedence first):
 
 1. ``--url`` / ``--token`` / ``--db`` command-line options
 2. ``UCS_AI_URL`` / ``UCS_AI_PAT`` / ``UCS_AI_DB`` environment variables
-3. A named profile stored by ``ucs-ai connect`` in
-   ``~/.config/ucs-ai/config.json`` (chmod 600)
+3. A named profile in ``~/.config/ucs-ai/config.json`` (chmod 600), stored
+   either by ``ucs-ai login`` (OAuth device sign-in: no token to copy, the
+   profile holds a self-refreshing access token) or by ``ucs-ai connect``
+   (a personal access token issued in Odoo)
 
 Output is JSON on stdout, suitable for piping into agents and scripts.
 """
@@ -28,6 +30,7 @@ import json
 import os
 import stat
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -35,6 +38,13 @@ import urllib.request
 from . import __version__
 
 GATEWAY_PREFIX = "/ucs_ai/gateway/v1"
+OAUTH_REGISTER = "/ucs_ai/oauth/register"
+OAUTH_DEVICE = "/ucs_ai/oauth/device"
+OAUTH_TOKEN = "/ucs_ai/oauth/token"  # noqa: S105
+DEVICE_GRANT = "urn:ietf:params:oauth:grant-type:device_code"
+# Refresh an OAuth access token this many seconds before it expires, so a
+# command started just before the deadline never hits a 401 mid-flight.
+REFRESH_MARGIN = 60
 TIMEOUT = 60
 # Sent on every request so the gateway's audit trail records which client
 # versions are in the wild (informs when an upgrade campaign is needed).
@@ -88,15 +98,69 @@ def _resolve_credentials(args: argparse.Namespace) -> tuple[str, str, str | None
     if profile:
         return (
             url or profile["url"],
-            token or profile["token"],
+            token or _profile_token(config, name),
             database or profile.get("db"),
         )
     _fail(
         "not_configured",
-        "No credentials. Run 'ucs-ai connect --url <odoo-url> --token <pat>' "
-        "first, or set UCS_AI_URL and UCS_AI_PAT.",
+        "No credentials. Run 'ucs-ai login --url <odoo-url>' first (or "
+        "'ucs-ai connect --url <odoo-url> --token <pat>'), or set UCS_AI_URL "
+        "and UCS_AI_PAT.",
     )
     raise AssertionError  # unreachable
+
+
+def _profile_token(config: dict, name: str) -> str:
+    """The bearer token of a profile, refreshing an OAuth one when due."""
+    profile = config["profiles"][name]
+    if "refresh_token" not in profile:
+        return profile["token"]
+    if profile.get("expires_at", 0) - REFRESH_MARGIN > time.time():
+        return profile["access_token"]
+    response = _oauth_post(profile["url"], OAUTH_TOKEN, {
+        "grant_type": "refresh_token",
+        "client_id": profile["client_id"],
+        "refresh_token": profile["refresh_token"],
+    }, profile.get("db"))
+    if "access_token" not in response:
+        _fail("unauthorized",
+              "The sign-in for profile '%s' has expired or was disconnected "
+              "in Odoo. Run 'ucs-ai login --url %s --profile %s' again."
+              % (name, profile["url"], name), status=1)
+    _store_oauth_tokens(profile, response)
+    _save_config(config)
+    return profile["access_token"]
+
+
+def _store_oauth_tokens(profile: dict, tokens: dict) -> None:
+    profile["access_token"] = tokens["access_token"]
+    profile["refresh_token"] = tokens["refresh_token"]
+    profile["expires_at"] = int(time.time()) + int(tokens.get("expires_in", 0))
+
+
+def _oauth_post(url: str, path: str, form: dict,
+                database: str | None = None) -> dict:
+    """Form-encoded POST to an OAuth endpoint; the JSON body on any status."""
+    headers = {"User-Agent": USER_AGENT,
+               "Content-Type": "application/x-www-form-urlencoded"}
+    if database:
+        headers["X-Odoo-Database"] = database
+    request = urllib.request.Request(  # noqa: S310 -- caller validated scheme
+        url.rstrip("/") + path,
+        data=urllib.parse.urlencode(form).encode(),
+        headers=headers,
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=TIMEOUT) as response:  # noqa: S310
+            return json.loads(response.read().decode())
+    except urllib.error.HTTPError as exc:
+        try:
+            return json.loads(exc.read().decode())
+        except Exception:
+            return {"error": "http_%s" % exc.code}
+    except urllib.error.URLError as exc:
+        return {"error": "connection_failed", "detail": str(exc.reason)}
 
 
 def _fail(error: str, detail: str, status: int = 1) -> None:
@@ -195,13 +259,96 @@ def _cmd_connect(args: argparse.Namespace) -> None:
     }, indent=2))
 
 
+def _cmd_login(args: argparse.Namespace) -> None:
+    """OAuth device sign-in (RFC 8628): no token to copy, no browser needed
+    on this machine. The person approves on any device; the tokens land in
+    the profile and refresh themselves from then on."""
+    url = args.url.rstrip("/")
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        _fail("not_configured", "The Odoo URL must be an HTTP(S) base URL.")
+    # Register this CLI as a public device-flow client (RFC 7591). The
+    # registration authorises nothing; the person's approval does.
+    request = urllib.request.Request(  # noqa: S310 -- scheme validated above
+        url + OAUTH_REGISTER,
+        data=json.dumps({
+            "client_name": "ucs-ai connector",
+            "grant_types": [DEVICE_GRANT, "refresh_token"],
+            "token_endpoint_auth_method": "none",
+        }).encode(),
+        headers={"User-Agent": USER_AGENT, "Content-Type": "application/json",
+                 **({"X-Odoo-Database": args.db} if args.db else {})},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=TIMEOUT) as response:  # noqa: S310
+            client_id = json.loads(response.read().decode())["client_id"]
+    except urllib.error.HTTPError as exc:
+        _fail("login_failed", "Registration refused (HTTP %s). Is the AI "
+              "gateway enabled on that Odoo, and is it version 19.0.8.10 or "
+              "later?" % exc.code)
+    except (urllib.error.URLError, KeyError, ValueError) as exc:
+        _fail("connection_failed", str(exc))
+    started = _oauth_post(url, OAUTH_DEVICE, {"client_id": client_id}, args.db)
+    if "device_code" not in started:
+        _fail("login_failed", json.dumps(started))
+    print("Open this link on any device and log in to Odoo:",
+          file=sys.stderr)
+    print("    " + started["verification_uri"], file=sys.stderr)
+    print("then enter the code:", file=sys.stderr)
+    print("    " + started["user_code"], file=sys.stderr)
+    print("Waiting for approval (Ctrl-C to cancel)...", file=sys.stderr)
+    interval = int(started.get("interval", 5))
+    deadline = time.time() + int(started.get("expires_in", 900))
+    while time.time() < deadline:
+        time.sleep(interval)
+        tokens = _oauth_post(url, OAUTH_TOKEN, {
+            "grant_type": DEVICE_GRANT,
+            "client_id": client_id,
+            "device_code": started["device_code"],
+        }, args.db)
+        error = tokens.get("error")
+        if error == "authorization_pending":
+            continue
+        if error == "slow_down":
+            interval += 5
+            continue
+        if error:
+            _fail("login_failed", {
+                "access_denied": "The sign-in was declined in Odoo.",
+                "expired_token": "The code expired before it was entered.",
+            }.get(error, error))
+        break
+    else:
+        _fail("login_failed", "The code expired before it was entered.")
+    config = _load_config()
+    profiles = config.setdefault("profiles", {})
+    profile = {"url": url, "client_id": client_id}
+    if args.db:
+        profile["db"] = args.db
+    _store_oauth_tokens(profile, tokens)
+    profiles[args.profile] = profile
+    config.setdefault("default", args.profile)
+    if args.default:
+        config["default"] = args.profile
+    _save_config(config)
+    result = _call(url, profile["access_token"], args.db, "list_models", {})
+    print(json.dumps({
+        "saved": args.profile,
+        "config": CONFIG_PATH,
+        "default": config["default"],
+        "readable_models": len(result.get("models", [])),
+    }, indent=2))
+
+
 def _cmd_profiles(args: argparse.Namespace) -> None:
     config = _load_config()
     out = {
         "config": CONFIG_PATH,
         "default": config.get("default"),
         "profiles": {
-            name: {"url": p["url"], "db": p.get("db")}
+            name: {"url": p["url"], "db": p.get("db"),
+                   "auth": "oauth" if "refresh_token" in p else "token"}
             for name, p in config.get("profiles", {}).items()
         },
     }
@@ -340,7 +487,18 @@ def build_parser() -> argparse.ArgumentParser:
                         version="ucs-ai-connector %s" % __version__)
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p = sub.add_parser("connect", help="verify a token and save it as a profile")
+    p = sub.add_parser(
+        "login",
+        help="sign in with a code shown here and entered in Odoo from any "
+             "device (no token, no browser on this machine); saves a "
+             "self-refreshing profile")
+    p.add_argument("--url", required=True, help="Odoo base URL, e.g. https://erp.example.com")
+    p.add_argument("--db", help="database name (only for multi-database servers)")
+    p.add_argument("--profile", default="default", help="profile name (default: 'default')")
+    p.add_argument("--default", action="store_true", help="make this the default profile")
+    p.set_defaults(func=_cmd_login)
+
+    p = sub.add_parser("connect", help="verify a personal access token and save it as a profile")
     p.add_argument("--url", required=True, help="Odoo base URL, e.g. https://erp.example.com")
     p.add_argument("--token", required=True, help="personal access token issued in Odoo")
     p.add_argument("--db", help="database name (only for multi-database servers)")

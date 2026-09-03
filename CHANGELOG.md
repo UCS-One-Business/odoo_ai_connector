@@ -12,6 +12,24 @@ and versions follow [Semantic Versioning](https://semver.org/):
 The server-side API contract is versioned independently by the gateway URL
 prefix (`/ucs_ai/gateway/v1`); the connector only ever speaks one prefix.
 
+## [1.3.0] - 2026-09-02
+
+### Added
+- `ucs-ai login --url <odoo-url>`: sign in with a code instead of a token
+  (OAuth 2.1 device authorisation, RFC 8628). The command shows a short
+  code and a link; the person opens the link on any device, logs in to
+  Odoo, types the code and approves a scope. The profile then holds a
+  self-refreshing access token, so nothing is ever copied and nothing
+  expires silently. Needs `ucs_ai` 19.0.8.10.0 or later on the server.
+- The MCP adapter reads the same profile (`UCS_AI_PROFILE`, or the default
+  profile when `UCS_AI_PAT` is unset), so a Claude Code registration needs
+  no token in its environment either.
+- `ucs-ai profiles` reports whether each profile is `oauth` or `token`.
+
+### Changed
+- `ucs-ai connect` (personal access token) is unchanged and remains the
+  path for CI pipelines and service accounts.
+
 ## [1.2.0] - 2026-08-09
 
 ### Added

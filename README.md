@@ -26,19 +26,19 @@ changes nothing about what it can see.
 With [uv](https://docs.astral.sh/uv/) (recommended — no setup needed):
 
 ```bash
-uv tool install git+https://github.com/UCS-One-Business/odoo_ai_connector@v1.2.0
+uv tool install git+https://github.com/UCS-One-Business/odoo_ai_connector@v1.3.0
 ```
 
 With pip/pipx:
 
 ```bash
-pipx install git+https://github.com/UCS-One-Business/odoo_ai_connector@v1.2.0
+pipx install git+https://github.com/UCS-One-Business/odoo_ai_connector@v1.3.0
 ```
 
 Or run without installing at all:
 
 ```bash
-uvx --from git+https://github.com/UCS-One-Business/odoo_ai_connector@v1.2.0 ucs-ai --help
+uvx --from git+https://github.com/UCS-One-Business/odoo_ai_connector@v1.3.0 ucs-ai --help
 ```
 
 Swap the tag for `@dev` to get the unreleased branch, needed for anything
@@ -53,7 +53,7 @@ Releases are git tags (`vX.Y.Z`, [SemVer](https://semver.org/)) with notes in
 
 ```bash
 ucs-ai --version
-uv tool install --force git+https://github.com/UCS-One-Business/odoo_ai_connector@v1.2.0
+uv tool install --force git+https://github.com/UCS-One-Business/odoo_ai_connector@v1.3.0
 ```
 
 For the MCP adapter, the version is pinned in the URL your MCP client is
@@ -67,18 +67,31 @@ prefix itself is retired.
 
 ## Connect
 
-Paste the command shown when your administrator issues the token in Odoo
-(*AI ▸ Gateway ▸ Access Tokens ▸ Issue Token*), or:
+Sign in with a code, no token to copy and no browser needed on this machine:
+
+```bash
+ucs-ai login --url https://your-odoo.example.com
+```
+
+The command prints a short code and a link. Open the link on any device, log
+in to Odoo, type the code and approve a scope; the CLI picks up its access
+within seconds and stores a self-refreshing profile. An administrator must
+first have assigned you to a scope in Odoo (*AI ▸ Configuration ▸ Scopes ▸
+Assigned Users*). Needs `ucs_ai` 19.0.8.10.0 or later on the server.
+
+For CI pipelines and service accounts, use a personal access token instead
+(*AI ▸ Connections ▸ New Connection ▸ Get My Access Token* in Odoo):
 
 ```bash
 ucs-ai connect --url https://your-odoo.example.com --token <PAT>
 ```
 
-`connect` verifies the token against the gateway before saving anything, then
-stores it as a profile. Multiple environments are handled with named profiles:
+`connect` verifies the token against the gateway before saving anything.
+Multiple environments are handled with named profiles, whichever way they
+were created:
 
 ```bash
-ucs-ai connect --url https://staging.example.com --token <PAT> --profile staging
+ucs-ai login --url https://staging.example.com --profile staging
 ucs-ai profiles          # list (tokens are never displayed)
 ucs-ai use staging       # switch default
 ucs-ai disconnect staging
@@ -132,18 +145,26 @@ metadata, so with [uv](https://docs.astral.sh/uv/) it runs straight from its
 URL, nothing to clone or install:
 
 ```bash
+# after `ucs-ai login`: the adapter reads the saved profile, no token in env
+claude mcp add ucs-ai \
+  -- uv run https://raw.githubusercontent.com/UCS-One-Business/odoo_ai_connector/v1.3.0/ucs_ai_mcp_server.py
+
+# or with a personal access token
 claude mcp add ucs-ai \
   --env UCS_AI_URL=https://your-odoo.example.com \
   --env UCS_AI_PAT=<the token> \
-  -- uv run https://raw.githubusercontent.com/UCS-One-Business/odoo_ai_connector/v1.2.0/ucs_ai_mcp_server.py
+  -- uv run https://raw.githubusercontent.com/UCS-One-Business/odoo_ai_connector/v1.3.0/ucs_ai_mcp_server.py
 ```
+
+`UCS_AI_PROFILE` selects a named profile; without it the default profile is
+used whenever `UCS_AI_PAT` is unset.
 
 Or in `~/.codex/config.toml`:
 
 ```toml
 [mcp_servers.ucs_ai]
 command = "uv"
-args = ["run", "https://raw.githubusercontent.com/UCS-One-Business/odoo_ai_connector/v1.2.0/ucs_ai_mcp_server.py"]
+args = ["run", "https://raw.githubusercontent.com/UCS-One-Business/odoo_ai_connector/v1.3.0/ucs_ai_mcp_server.py"]
 env = { UCS_AI_URL = "https://your-odoo.example.com", UCS_AI_PAT = "<the token>" }
 ```
 

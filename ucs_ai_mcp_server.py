@@ -12,14 +12,21 @@ Odoo, where the PAT's scope is intersected with the bound user's rights. If
 this adapter is modified or replaced, nothing about the security model
 changes — it can only ever see what the gateway already allows.
 
-Configuration (FR-29) — exactly two settings, via environment variables:
+Configuration (FR-29), via environment variables:
 
     UCS_AI_URL   Base URL of the Odoo server, e.g. https://mycompany.odoo.example
-    UCS_AI_PAT   A Personal Access Token issued in Odoo under
-                 AI > Configuration > Access Tokens
+    UCS_AI_PAT   A Personal Access Token issued in Odoo (AI > Connections >
+                 New Connection > Get My Access Token)
     UCS_AI_DB    Optional database name. Only needed when the server hosts
                  several databases (sent as X-Odoo-Database); the production
                  stack is single-database and does not need it.
+
+or, with no token at all, a profile created by ``ucs-ai login`` (OAuth
+device sign-in, tokens refresh themselves):
+
+    UCS_AI_PROFILE   Profile name in ~/.config/ucs-ai/config.json; when
+                     unset and no UCS_AI_PAT is given, the default profile
+                     is used.
 
 Run (stdio transport, as MCP clients expect). With uv, the PEP 723 header
 above resolves the dependency automatically — no venv or pip step:
@@ -37,7 +44,9 @@ See the addon's docs/connecting.md for Claude Code / Codex registration.
 
 import json
 import os
+import stat
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -49,12 +58,17 @@ except ImportError:  # pragma: no cover
              "(2.x removed mcp.server.fastmcp)")
 
 GATEWAY_PREFIX = '/ucs_ai/gateway/v1'
+OAUTH_TOKEN = '/ucs_ai/oauth/token'  # noqa: S105
+REFRESH_MARGIN = 60
 TIMEOUT = 60
+CONFIG_PATH = os.path.join(
+    os.environ.get('XDG_CONFIG_HOME') or os.path.expanduser('~/.config'),
+    'ucs-ai', 'config.json')
 # Kept in lockstep with ucs_ai_connector.__version__ (this script must stay
 # standalone-runnable from a URL, so the constant is duplicated here; the
 # release script asserts they match). Advertised in the MCP initialize
 # handshake and sent as User-Agent so the gateway audit trail records it.
-__version__ = '1.2.0'
+__version__ = '1.3.0'
 USER_AGENT = 'ucs-ai-mcp/%s' % __version__
 
 mcp = FastMCP(
@@ -85,9 +99,17 @@ def _call(operation: str, payload: dict) -> dict:
     """
     base_url = os.environ.get('UCS_AI_URL', '').rstrip('/')
     pat = os.environ.get('UCS_AI_PAT', '')
+    database = os.environ.get('UCS_AI_DB')
+    if not pat:
+        # No token given: use a profile saved by ``ucs-ai login``.
+        profile = _profile_credentials()
+        if 'error' in profile:
+            return profile
+        base_url, pat = profile['url'], profile['token']
+        database = database or profile.get('db')
     if not base_url or not pat:
         return {'error': 'adapter_not_configured',
-                'detail': 'Set the UCS_AI_URL and UCS_AI_PAT environment variables.'}
+                'detail': 'Set UCS_AI_URL and UCS_AI_PAT, or run "ucs-ai login".'}
     parsed_url = urllib.parse.urlparse(base_url)
     if parsed_url.scheme not in ('http', 'https') or not parsed_url.netloc:
         return {'error': 'adapter_not_configured',
@@ -98,7 +120,6 @@ def _call(operation: str, payload: dict) -> dict:
         # The PAT travels only in this header, never in URL or body.
         'Authorization': 'Bearer ' + pat,
     }
-    database = os.environ.get('UCS_AI_DB')
     if database:
         headers['X-Odoo-Database'] = database
     request = urllib.request.Request(  # noqa: S310 -- scheme validated above
@@ -123,6 +144,54 @@ def _call(operation: str, payload: dict) -> dict:
         return {'error': 'connection_failed', 'detail': str(exc.reason)}
     except Exception as exc:
         return {'error': 'adapter_error', 'detail': str(exc)}
+
+
+def _profile_credentials() -> dict:
+    """``{'url', 'token', 'db'}`` from the ucs-ai profile, refreshing an
+    OAuth access token when it is about to expire (same rules as the CLI)."""
+    try:
+        with open(CONFIG_PATH, encoding='utf-8') as handle:
+            config = json.load(handle)
+    except (OSError, ValueError):
+        return {'error': 'adapter_not_configured',
+                'detail': 'No ucs-ai profile found. Run "ucs-ai login --url <odoo-url>".'}
+    name = os.environ.get('UCS_AI_PROFILE') or config.get('default')
+    profile = (config.get('profiles') or {}).get(name)
+    if not profile:
+        return {'error': 'adapter_not_configured',
+                'detail': 'No ucs-ai profile named %r.' % name}
+    if 'refresh_token' not in profile:
+        return {'url': profile['url'], 'token': profile['token'],
+                'db': profile.get('db')}
+    if profile.get('expires_at', 0) - REFRESH_MARGIN <= time.time():
+        request = urllib.request.Request(  # noqa: S310 -- profile URL was validated at login
+            profile['url'].rstrip('/') + OAUTH_TOKEN,
+            data=urllib.parse.urlencode({
+                'grant_type': 'refresh_token',
+                'client_id': profile['client_id'],
+                'refresh_token': profile['refresh_token'],
+            }).encode(),
+            headers={'User-Agent': USER_AGENT,
+                     'Content-Type': 'application/x-www-form-urlencoded',
+                     **({'X-Odoo-Database': profile['db']} if profile.get('db') else {})},
+            method='POST')
+        try:
+            with urllib.request.urlopen(request, timeout=TIMEOUT) as response:  # noqa: S310
+                tokens = json.loads(response.read().decode())
+        except Exception:
+            return {'error': 'unauthorized',
+                    'detail': 'The sign-in for profile %r expired or was '
+                              'disconnected in Odoo; run "ucs-ai login" again.' % name}
+        profile['access_token'] = tokens['access_token']
+        profile['refresh_token'] = tokens['refresh_token']
+        profile['expires_at'] = int(time.time()) + int(tokens.get('expires_in', 0))
+        fd = os.open(CONFIG_PATH, os.O_WRONLY | os.O_TRUNC,
+                     stat.S_IRUSR | stat.S_IWUSR)
+        with os.fdopen(fd, 'w', encoding='utf-8') as handle:
+            json.dump(config, handle, indent=2)
+            handle.write('\n')
+    return {'url': profile['url'], 'token': profile['access_token'],
+            'db': profile.get('db')}
 
 
 @mcp.tool()

@@ -6,4 +6,4 @@ this constant: pyproject.toml (via hatch's version source), the CLI's
 MCP adapter's advertised server version.
 """
 
-__version__ = "1.2.0"
+__version__ = "1.3.0"
